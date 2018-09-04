@@ -184,7 +184,7 @@ namespace Kbg.NppPluginNET
                             //Is there any modifiers to print
                             if (modifiers != "")
                             {
-                                dstr += "C7GCC:NS=" + ns + "," + modifiers + ";" + "\n";
+                                dstr += "C7GCC:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + "," + modifiers + ";" + "\n";
                             }
 
                             //Resetting variables
@@ -203,7 +203,7 @@ namespace Kbg.NppPluginNET
                     //Is there any modifiers to print
                     if (modifiers != "")
                     {
-                        dstr += "C7GCC:NS=" + ns + "," + modifiers + ";" + "\n";
+                        dstr += "C7GCC:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + "," + modifiers + ";" + "\n";
                     }
 
                     MessageBox.Show(dstr);
