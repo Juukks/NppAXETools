@@ -15,8 +15,6 @@ namespace Kbg.NppPluginNET
         internal const string PluginName = "AXE Tools";
         static string iniFilePath = null;
         static bool someSetting = false;
-        static Bitmap tbBmp = Properties.Resources.star;
-        static Bitmap tbBmp_tbTab = Properties.Resources.star_bmp;
 
         public static void OnNotification(ScNotification notification)
         {  
@@ -39,17 +37,9 @@ namespace Kbg.NppPluginNET
             iniFilePath = Path.Combine(iniFilePath, PluginName + ".ini");
             someSetting = (Win32.GetPrivateProfileInt("SomeSection", "SomeKey", 0, iniFilePath) != 0);
 
-            PluginBase.SetCommand(0, "C7GSP converter", c7gspFunction, new ShortcutKey(false, false, false, Keys.None));
+            PluginBase.SetCommand(0, "C7GSP converter", C7GSPFunction, new ShortcutKey(false, false, false, Keys.None));
         }
 
-        internal static void SetToolBarIcon()
-        {
-            toolbarIcons tbIcons = new toolbarIcons();
-            tbIcons.hToolbarBmp = tbBmp.GetHbitmap();
-            IntPtr pTbIcons = Marshal.AllocHGlobal(Marshal.SizeOf(tbIcons));
-            Marshal.StructureToPtr(tbIcons, pTbIcons, false);
-            Marshal.FreeHGlobal(pTbIcons);
-        }
 
         internal static void PluginCleanUp()
         {
@@ -57,7 +47,7 @@ namespace Kbg.NppPluginNET
         }
 
 
-        internal static void c7gspFunction()
+        internal static void C7GSPFunction()
         {
             
             String selStr;
@@ -95,8 +85,8 @@ namespace Kbg.NppPluginNET
                     string modifiers = "";
 
                     while ((line = reader.ReadLine()) != null) {
-                        //Parse only lines which not empty
-                        if (line.Length > 0)
+                        //Parse only lines which not empty and doesn't contain text
+                        if (line.Length > 0 && !int.TryParse(line.Substring(0,1), out ignoreMe))
                         {
                             //If parsing is ongoing
                             if (parsingGT == true)
@@ -206,7 +196,9 @@ namespace Kbg.NppPluginNET
                         dstr += "C7GCC:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + "," + modifiers + ";" + "\n";
                     }
 
-                    MessageBox.Show(dstr);
+                    //MessageBox.Show(dstr);
+                    scintilla.Clear();
+                    scintilla.InsertText(startLinePos, dstr);
                 }
                 
             }
