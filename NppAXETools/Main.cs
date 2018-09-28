@@ -49,9 +49,11 @@ namespace Kbg.NppPluginNET
 
         internal static void C7GSPFunction()
         {
-            
-            String selStr;
+            //Preparing some variables
             var scintilla = new ScintillaGateway(PluginBase.GetCurrentScintilla());
+
+            //Starting Undo "recording". Next steps can be undo with one undo command
+            scintilla.BeginUndoAction();
 
             //Is there any text selected
             if (scintilla.GetSelText() != "") {
@@ -69,143 +71,140 @@ namespace Kbg.NppPluginNET
                 //Setting the selection as needed
                 scintilla.SetSel(startLinePos, endLinePos);
 
-                //Picking up the selected text to memory for parsing
-                selStr = scintilla.GetSelText();
+                //Preparing needed variables
+                int ignoreMe = 0;
 
-                //Iterating through the lines
-                using (StringReader reader = new StringReader(selStr.ToString())) {
-                    string dstr = "";
-                    string line;
-                    int ignoreMe;
+                //Gathered information
+                string line = "";
+                int lineFeedLen = 0;
+                int tt = 0, np = 0, na = 0, gtrc = 0;
+                string ns = "";
+                string modifiers = "";
 
-                    bool parsingGT = false;
-
-                    int tt = 0, np = 0, na = 0, gtrc = 0;
-                    string ns = "";
-                    string modifiers = "";
-
-                    while ((line = reader.ReadLine()) != null) {
-                        //Parse only lines which not empty and doesn't contain text
-                        if (line.Length > 0 && !int.TryParse(line.Substring(0,1), out ignoreMe))
+                //Loopping through the selected lines
+                int i = startLineNum;
+                while ( i <= endLineNum)
+                {
+                    //Line to the memory
+                    line = scintilla.GetLine(i);
+                    
+                    if(line.Length > 2)
+                    {
+                        //Checking did we get a fresh GT line (three first chars are int (TT))
+                        if (int.TryParse(line.Substring(0, 3), out ignoreMe))
                         {
-                            //If parsing is ongoing
-                            if (parsingGT == true)
+                            //Gathering the basic GT information
+                            tt = int.Parse(line.Substring(0, 3));
+                            np = int.Parse(line.Substring(5, 2));
+                            na = int.Parse(line.Substring(9, 3));
+                            ns = line.Substring(14, 16).Replace(" ", string.Empty);
+                            gtrc = na = int.Parse(line.Substring(56, 3));
+
+                            //Move carret to the begin of the line
+                            scintilla.SetCurrentPos(scintilla.PositionFromLine(i));
+                            //Delete all from the line
+                            scintilla.DelLineRight();
+                            //Add text
+                            scintilla.InsertText(scintilla.PositionFromLine(i), "C7GSI:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",GTRC=" + gtrc + ";");
+
+                            //Checking next line if it it's not empty
+                            if (scintilla.GetLine(i + 1).Length >= 9)
                             {
-                                //If we are not in header line and not in the line which begins the analyse
-                                if (line.Substring(9, 3) != "MTT" && !(int.TryParse(line.Substring(0, 3), out ignoreMe)))
+                                //And the line will contain header which begins with MTT
+                                if (scintilla.GetLine(i + 1).Substring(9, 3) == "MTT")
                                 {
-                                    //Determining which variables the line will contain
-                                    if (line.Length == 12) {
-                                        modifiers += "MTT=" + line.Substring(9, 3).Replace(" ", string.Empty);
-                                    }
-                                    else if(line.Length == 17)
-                                    {
-                                        if(!string.IsNullOrWhiteSpace(line.Substring(9, 3))) { 
-                                            modifiers += "MTT=" + line.Substring(9, 3).Replace(" ", string.Empty) + ",";
-                                        }
+                                    //If yes then take the line under it to the variable
+                                    modifiers = scintilla.GetLine(i + 2);
 
-                                        modifiers += "MNP=" + line.Substring(14, 3).Replace(" ", string.Empty);
-                                    }
-                                    else if (line.Length == 22)
+                                    //If linefeed is CRLF, then two extra characters in the end of line
+                                    if (scintilla.GetEOLMode() == 0)
                                     {
-                                        if (!string.IsNullOrWhiteSpace(line.Substring(9, 3)))
-                                        {
-                                            modifiers += "MTT=" + line.Substring(9, 3).Replace(" ", string.Empty) + ",";
-                                        }
-                                        if (!string.IsNullOrWhiteSpace(line.Substring(14, 3)))
-                                        {
-                                            modifiers += "MNP=" + line.Substring(14, 3).Replace(" ", string.Empty) + ",";
-                                        }
-
-                                        modifiers += "MNA=" + line.Substring(19, 3).Replace(" ", string.Empty);
+                                        lineFeedLen = 2;
                                     }
                                     else
                                     {
-                                        if (!string.IsNullOrWhiteSpace(line.Substring(9, 3)))
-                                        {
-                                            modifiers += "MTT=" + line.Substring(9, 3).Replace(" ", string.Empty) + ",";
-                                        }
-                                        if (!string.IsNullOrWhiteSpace(line.Substring(14, 3)))
-                                        {
-                                            modifiers += "MNP=" + line.Substring(14, 3).Replace(" ", string.Empty) + ",";
-                                        }
-                                        if (!string.IsNullOrWhiteSpace(line.Substring(19, 3)))
-                                        {
-                                            modifiers += "MNA=" + line.Substring(19, 3).Replace(" ", string.Empty) + ",";
-                                        }
-
-                                        modifiers += "MNS=" + line.Substring(24, (line.Length - 24)).Replace(" ", string.Empty);
+                                        lineFeedLen = 1;
                                     }
 
+                                    //Removing lines which not needed anymore
+                                    scintilla.SetCurrentPos(scintilla.PositionFromLine(i + 1));
+                                    scintilla.LineDelete();
+                                    scintilla.LineDelete();
+
+                                    endLineNum = endLineNum - 2;
+
+                                    //Determining which variables the modifiers line will contain
+                                    if (modifiers.Length == (12 + lineFeedLen))
+                                    {
+                                        //Insert command to the line
+                                        scintilla.InsertText(scintilla.PositionFromLine(i + 1), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MTT=" + modifiers.Substring(9, 3).Replace(" ", string.Empty) + ";");
+                                    }
+                                    else if (modifiers.Length == (17 + lineFeedLen))
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(modifiers.Substring(9, 3)))
+                                        {
+                                            //Insert command to the line
+                                            scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MTT=" + modifiers.Substring(9, 3).Replace(" ", string.Empty) + ";");
+                                            //Go to end of the current line
+                                            scintilla.GotoPos(scintilla.GetLineEndPosition(scintilla.LineFromPosition(scintilla.GetCurrentPos())));
+                                            //Adding new line
+                                            scintilla.NewLine();
+                                            endLineNum++;
+                                        }
+                                        scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MNP=" + modifiers.Substring(14, 3).Replace(" ", string.Empty) + ";");
+                                    }
+                                    else if (modifiers.Length == (22 + lineFeedLen))
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(modifiers.Substring(9, 3)))
+                                        {
+                                            scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MTT=" + modifiers.Substring(9, 3).Replace(" ", string.Empty) + ";");
+                                            scintilla.GotoPos(scintilla.GetLineEndPosition(scintilla.LineFromPosition(scintilla.GetCurrentPos())));
+                                            scintilla.NewLine();
+                                            endLineNum++;
+                                        }
+                                        if (!string.IsNullOrWhiteSpace(modifiers.Substring(14, 3)))
+                                        {
+                                            scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MNP=" + modifiers.Substring(14, 3).Replace(" ", string.Empty) + ";");
+                                            scintilla.GotoPos(scintilla.GetLineEndPosition(scintilla.LineFromPosition(scintilla.GetCurrentPos())));
+                                            scintilla.NewLine();
+                                            endLineNum++;
+                                        }
+                                        scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MNA=" + modifiers.Substring(19, 3).Replace(" ", string.Empty) + ";");
+                                    }
+                                    else
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(modifiers.Substring(9, 3)))
+                                        {
+                                            scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MTT=" + modifiers.Substring(9, 3).Replace(" ", string.Empty) + ";");
+                                            scintilla.GotoPos(scintilla.GetLineEndPosition(scintilla.LineFromPosition(scintilla.GetCurrentPos())));
+                                            scintilla.NewLine();
+                                            endLineNum++;
+                                        }
+                                        if (!string.IsNullOrWhiteSpace(modifiers.Substring(14, 3)))
+                                        {
+                                            scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MNP=" + modifiers.Substring(14, 3).Replace(" ", string.Empty) + ";");
+                                            scintilla.GotoPos(scintilla.GetLineEndPosition(scintilla.LineFromPosition(scintilla.GetCurrentPos())));
+                                            scintilla.NewLine();
+                                            endLineNum++;
+                                        }
+                                        if (!string.IsNullOrWhiteSpace(modifiers.Substring(19, 3)))
+                                        {
+                                            scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MNA=" + modifiers.Substring(19, 3).Replace(" ", string.Empty) + ";");
+                                            scintilla.GotoPos(scintilla.GetLineEndPosition(scintilla.LineFromPosition(scintilla.GetCurrentPos())));
+                                            scintilla.NewLine();
+                                            endLineNum++;
+                                        }
+                                        scintilla.InsertText(scintilla.GetCurrentPos(), "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + ",NS=" + ns + ",MNS=" + modifiers.Substring(24, (modifiers.Length - 24 - lineFeedLen)).Replace(" ", string.Empty) + ";");
+                                    }
                                 }
                             }
-
-                            //Start parsing when reached the line which begins with number
-                            if (int.TryParse(line.Substring(0, 3), out ignoreMe))
-                            {
-                                //Are we still parsing
-                                if (parsingGT == true)
-                                {
-                                    //Printing previous definition and resetting values
-                                    dstr += "C7GSI:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + ",GTRC=" + gtrc + ";" + "\n";
-                                    tt = int.Parse(line.Substring(0, 3));
-                                    np = int.Parse(line.Substring(5, 2));
-                                    na = int.Parse(line.Substring(9, 3));
-                                    ns = line.Substring(14, 16).Replace(" ", string.Empty);
-                                    gtrc = na = int.Parse(line.Substring(56, 3));
-                                }
-                                else
-                                {
-                                    //Gathering information from the line
-                                    tt = int.Parse(line.Substring(0, 3));
-                                    np = int.Parse(line.Substring(5, 2));
-                                    na = int.Parse(line.Substring(9, 3));
-                                    ns = line.Substring(14, 16).Replace(" ", string.Empty);
-                                    gtrc = int.Parse(line.Substring(56, 3));
-
-                                    parsingGT = true;
-                                }
-                            }
-
-                        }
-                        else {
-                            //Printing previous definition and resetting values
-                            dstr += "C7GSI:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + ",GTRC=" + gtrc + ";" + "\n";
-                            //Is there any modifiers to print
-                            if (modifiers != "")
-                            {
-                                dstr += "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + "," + modifiers + ";" + "\n";
-                            }
-
-                            //Resetting variables
-                            tt = 0;
-                            np = 0;
-                            na = 0;
-                            gtrc = 0;
-                            ns = "0";
-                            modifiers = "";
-
-                            parsingGT = false;
                         }
                     }
 
-                    dstr += "C7GSI:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + ",GTRC=" + gtrc + ";" + "\n";
-                    //Is there any modifiers to print
-                    if (modifiers != "")
-                    {
-                        dstr += "C7GSC:TT=" + tt + ",NP=" + np + ",NA=" + na + ",NS=" + ns + "," + modifiers + ";" + "\n";
-                    }
-
-                    //MessageBox.Show(dstr);
-                    scintilla.Clear();
-                    scintilla.InsertText(startLinePos, dstr);
+                    i++;
                 }
-                
             }
-
-            
+            scintilla.EndUndoAction();
         }
-
-        
     }
 }
